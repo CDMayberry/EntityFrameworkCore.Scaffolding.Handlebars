@@ -267,6 +267,8 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
                     { "property-annotations",  PropertyAnnotationsData },
                     { "property-comment", _options?.Value?.GenerateComments == true ? GenerateComment(property.GetComment(), 2) : null },
                     { "property-isnullable", propertyIsNullable },
+                    { "property-isenum", false },
+                    { "property-default-enum", null },
                     { "nullable-reference-types", UseNullableReferenceTypes }
                 });
             }
@@ -527,7 +529,7 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
         private void GenerateColumnAttribute(IProperty property)
         {
             var columnName = property.GetColumnName();
-            var propertyName = EntityTypeTransformationService.TransformPropertyName(property.DeclaringEntityType, property.Name, property.DeclaringType.Name);
+            var propertyName = EntityTypeTransformationService.TransformPropertyName((IEntityType)property.DeclaringType, property.Name, property.DeclaringType.Name);
             var columnType = property.GetConfiguredColumnType();
 
             var delimitedColumnName = columnName != null && columnName != propertyName ? CSharpHelper.Literal(columnName) : null;
@@ -636,6 +638,11 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
         {
             if (navigation == null) throw new ArgumentNullException(nameof(navigation));
 
+            if (navigation.ForeignKey.DeclaringEntityType.IsManyToManyJoinEntityType())
+            { 
+                return;
+            }
+
             GenerateForeignKeyAttribute(entityType, navigation);
             GenerateInversePropertyAttribute(entityType, navigation);
         }
@@ -697,6 +704,11 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
         private void GenerateNavigationDataAnnotations(IEntityType entityType, ISkipNavigation navigation)
         {
             if (navigation == null) throw new ArgumentNullException(nameof(navigation));
+
+            if (navigation.ForeignKey.DeclaringEntityType.IsManyToManyJoinEntityType())
+            {
+                return;
+            }
 
             GenerateForeignKeyAttribute(entityType, navigation);
             GenerateInversePropertyAttribute(entityType, navigation);

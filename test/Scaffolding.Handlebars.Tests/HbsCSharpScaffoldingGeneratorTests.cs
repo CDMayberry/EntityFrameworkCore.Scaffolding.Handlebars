@@ -10,6 +10,7 @@ using HandlebarsDotNet;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.EntityFrameworkCore.Scaffolding;
 using Microsoft.EntityFrameworkCore.SqlServer.Design.Internal;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Scaffolding.Handlebars.Tests.Fakes;
@@ -21,10 +22,10 @@ using Microsoft.EntityFrameworkCore.Metadata.Internal;
 
 namespace Scaffolding.Handlebars.Tests
 {
-    [Collection("NorthwindDbContext")]
+    [Collection(Constants.CollectionDefinitions.DatabaseCollection)]
     public partial class HbsCSharpScaffoldingGeneratorTests
     {
-        private NorthwindDbContextFixture Fixture { get; }
+        private static string ConnectionString { get; set; }
         private InputFile ContextClassTemplate { get; }
         private InputFile ContextImportsTemplate { get; }
         private InputFile ContextCtorTemplate { get; }
@@ -39,11 +40,11 @@ namespace Scaffolding.Handlebars.Tests
         private InputFile EntityCtorAltTemplate { get; }
         private InputFile EntityPropertiesAltTemplate { get; }
 
-        public HbsCSharpScaffoldingGeneratorTests(NorthwindDbContextFixture fixture)
+        public HbsCSharpScaffoldingGeneratorTests(DatabaseFixture fixture)
         {
-            Fixture = fixture;
-            Fixture.Initialize(useInMemory: false);
-
+            fixture.Initialize();
+            ConnectionString = fixture.ConnectionString;
+            
             var projectRootDir = Path.Combine("..", "..", "..", "..", "..");
             var projectRootAltDir = Path.Combine("..", "..", "..");
 
@@ -164,7 +165,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -209,7 +210,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(){NoPluralize = useTransformers}, // Pluralized properties can also generate .ToTable methods. We only want mapping transforms to generate the .ToTable methods
                 codeOptions: new ModelCodeGenerationOptions
@@ -252,7 +253,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -303,7 +304,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -346,7 +347,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -433,7 +434,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -474,7 +475,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -513,11 +514,11 @@ namespace Scaffolding.Handlebars.Tests
         [Fact]
         public void Save_Should_Write_Context_File()
         {
-            using var directory = new TempDirectory();
             // Arrange
+            using var directory = new TempDirectory();
             var scaffolder = CreateScaffolder(ReverseEngineerOptions.DbContextOnly);
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -547,11 +548,11 @@ namespace Scaffolding.Handlebars.Tests
         [Fact]
         public void Save_Should_Write_Entity_Files()
         {
-            using var directory = new TempDirectory();
             // Arrange
+            using var directory = new TempDirectory();
             var scaffolder = CreateScaffolder(ReverseEngineerOptions.EntitiesOnly);
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -583,12 +584,12 @@ namespace Scaffolding.Handlebars.Tests
         [Fact]
         public void Save_Should_Write_Context_and_Entity_Files_With_Prefix()
         {
-            using var directory = new TempDirectory();
             // Arrange
+            using var directory = new TempDirectory();
             var filenamePrefix = "prefix.";
             var scaffolder = CreateScaffolder(ReverseEngineerOptions.DbContextAndEntities, filenamePrefix);
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
@@ -620,11 +621,11 @@ namespace Scaffolding.Handlebars.Tests
         [Fact]
         public void Save_Should_Write_Context_and_Entity_Files()
         {
-            using var directory = new TempDirectory();
             // Arrange
+            using var directory = new TempDirectory();
             var scaffolder = CreateScaffolder(ReverseEngineerOptions.DbContextAndEntities);
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions

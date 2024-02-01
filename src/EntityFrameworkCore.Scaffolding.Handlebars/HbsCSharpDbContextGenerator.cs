@@ -244,7 +244,7 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
 
                     foreach (var entityType in model.GetScaffoldEntityTypes(_options.Value))
                     {
-                        if (IsManyToManyJoinEntityType(entityType))
+                        if (entityType.IsManyToManyJoinEntityType())
                         {
                             continue;
                         }
@@ -285,7 +285,7 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
 
             foreach (var entityType in model.GetScaffoldEntityTypes(_options.Value))
             {
-                if (IsManyToManyJoinEntityType(entityType))
+                if (entityType.IsManyToManyJoinEntityType())
                 {
                     continue;
                 }
@@ -350,6 +350,11 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
         private void GenerateEntityType(IEntityType entityType, IndentedStringBuilder sb)
         {
             GenerateKey(entityType.FindPrimaryKey(), entityType, sb);
+
+            // Add HasTriggers Fluent method added for EF7+
+            entityType.GetDeclaredTriggers()
+                .ToList()
+                .ForEach(t => GenerateTrigger(entityType, t, sb));
 
             var annotations = AnnotationCodeGenerator
                 .FilterIgnoredAnnotations(entityType.GetAnnotations())
@@ -511,6 +516,20 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
             AppendMultiLineFluentApi(key.DeclaringEntityType, lines, sb);
         }
 
+        /// <summary>
+        /// Generate Trigger Fluent API
+        /// </summary>
+        /// <param name="entityType"></param>
+        /// <param name="trigger"></param>
+        /// <param name="sb"></param>
+        private void GenerateTrigger(IEntityType entityType, ITrigger trigger, IndentedStringBuilder sb)
+        {
+            var parameterString = $"e => e.HasTrigger ( \"{trigger.ModelName}\" ) ";
+            var lines = new List<string> { $".{nameof(RelationalEntityTypeBuilderExtensions.ToTable)}({parameterString})" };
+
+            AppendMultiLineFluentApi(entityType, lines, sb);
+        }
+
         private void GenerateTableName(IEntityType entityType, IndentedStringBuilder sb)
         {
             var tableName = entityType.GetTableName();
@@ -660,12 +679,24 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
                 {
                     lines.Add($".{nameof(RelationalPropertyBuilderExtensions.HasDefaultValue)}()");
                     annotations.Remove(RelationalAnnotationNames.DefaultValue);
+                    annotations.Remove(RelationalAnnotationNames.DefaultValueSql);
                 }
                 else if (defaultValue != null)
                 {
-                    lines.Add(
-                        $".{nameof(RelationalPropertyBuilderExtensions.HasDefaultValue)}({CSharpHelper.UnknownLiteral(defaultValue)})");
+                    // Lookup Default Enum Value
+                    var defaultEnumValue = EntityTypeTransformationService.TransformPropertyDefaultEnum(entityType, property.Name, property.DeclaringType.Name);
+                    if (string.IsNullOrEmpty(defaultEnumValue))
+                    {
+                        lines.Add(
+                            $".{nameof(RelationalPropertyBuilderExtensions.HasDefaultValue)}({CSharpHelper.UnknownLiteral(defaultValue)})");
+                    }
+                    else
+                    {
+                        lines.Add(
+                            $".{nameof(RelationalPropertyBuilderExtensions.HasDefaultValue)}({defaultEnumValue})");
+                    }
                     annotations.Remove(RelationalAnnotationNames.DefaultValue);
+                    annotations.Remove(RelationalAnnotationNames.DefaultValueSql);
                 }
             }
 
@@ -709,7 +740,7 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
                     break;
             }
 
-            AppendMultiLineFluentApi(property.DeclaringEntityType, lines, sb);
+            AppendMultiLineFluentApi((IEntityType)property.DeclaringType, lines, sb);
         }
 
         private void GenerateRelationship(IEntityType entityType, IForeignKey foreignKey, bool useDataAnnotations, IndentedStringBuilder sb)
@@ -742,7 +773,7 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
 
             lines.Add(
                 $".{nameof(ReferenceReferenceBuilder.HasForeignKey)}"
-                + (foreignKey.IsUnique ? $"<{GetEntityTypeName(foreignKey.PrincipalEntityType, EntityTypeTransformationService.TransformTypeEntityName(foreignKey.DeclaringEntityType, foreignKey.DeclaringEntityType.Name))}>" : "")
+                + (foreignKey.IsUnique ? $"<{GetEntityTypeName(entityType, EntityTypeTransformationService.TransformTypeEntityName(entityType, entityType.Name))}>" : "")
                 + $"(d => {GenerateLambdaToKey(entityType, foreignKey.Properties, "d", EntityTypeTransformationService.TransformPropertyName)})");
 
             var defaultOnDeleteAction = foreignKey.IsRequired
@@ -891,8 +922,18 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
 
                             foreach (var property in joinEntityType.GetProperties())
                             {
-                                lines.Add(
-                                    $"j.{nameof(EntityTypeBuilder.IndexerProperty)}<{CSharpHelper.Reference(property.ClrType)}>({CSharpHelper.Literal(property.Name)})");
+                                // Lookup Property Type Transformation if it is an Enumeration
+                                string enumPropertyType = EntityTypeTransformationService.TransformPropertyTypeIfEnumaration(joinEntityType, property.Name, property.DeclaringType.Name);
+                                if (enumPropertyType == null)
+                                {
+                                    lines.Add(
+                                        $"j.{nameof(EntityTypeBuilder.IndexerProperty)}<{CSharpHelper.Reference(property.ClrType)}>({CSharpHelper.Literal(property.Name)})");
+                                }
+                                else
+                                {
+                                    lines.Add(
+                                        $"j.{nameof(EntityTypeBuilder.IndexerProperty)}<{enumPropertyType}>({CSharpHelper.Literal(property.Name)})");
+                                }
 
                                 var propertyAnnotations = AnnotationCodeGenerator
                                     .FilterIgnoredAnnotations(property.GetAnnotations())
@@ -948,12 +989,14 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
                                     {
                                         lines.Add($".{nameof(RelationalPropertyBuilderExtensions.HasDefaultValue)}()");
                                         propertyAnnotations.Remove(RelationalAnnotationNames.DefaultValue);
+                                        propertyAnnotations.Remove(RelationalAnnotationNames.DefaultValueSql);
                                     }
                                     else if (defaultValue != null)
                                     {
                                         lines.Add(
                                             $".{nameof(RelationalPropertyBuilderExtensions.HasDefaultValue)}({CSharpHelper.UnknownLiteral(defaultValue)})");
                                         propertyAnnotations.Remove(RelationalAnnotationNames.DefaultValue);
+                                        propertyAnnotations.Remove(RelationalAnnotationNames.DefaultValueSql);
                                     }
                                 }
 
@@ -1183,30 +1226,5 @@ namespace EntityFrameworkCore.Scaffolding.Handlebars
             => $".HasAnnotation({CSharpHelper.Literal(annotation.Name)}, " +
                $"{CSharpHelper.UnknownLiteral(annotation.Value)})";
 
-        private static bool IsManyToManyJoinEntityType(IEntityType entityType)
-        {
-            if (!entityType.GetNavigations().Any()
-                && !entityType.GetSkipNavigations().Any())
-            {
-                var primaryKey = entityType.FindPrimaryKey();
-                var properties = entityType.GetProperties().ToList();
-                var foreignKeys = entityType.GetForeignKeys().ToList();
-                if (primaryKey != null
-                    && primaryKey.Properties.Count > 1
-                    && foreignKeys.Count == 2
-                    && primaryKey.Properties.Count == properties.Count
-                    && foreignKeys[0].Properties.Count + foreignKeys[1].Properties.Count == properties.Count
-                    && !foreignKeys[0].Properties.Intersect(foreignKeys[1].Properties).Any()
-                    && foreignKeys[0].IsRequired
-                    && foreignKeys[1].IsRequired
-                    && !foreignKeys[0].IsUnique
-                    && !foreignKeys[1].IsUnique)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
     }
 }
