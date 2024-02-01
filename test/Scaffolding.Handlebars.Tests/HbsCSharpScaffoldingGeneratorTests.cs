@@ -392,7 +392,7 @@ namespace Scaffolding.Handlebars.Tests
 
             // Act
             var model = scaffolder.ScaffoldModel(
-                connectionString: Constants.Connections.SqlServerConnection,
+                connectionString: ConnectionString,
                 databaseOptions: new DatabaseModelFactoryOptions(),
                 modelOptions: new ModelReverseEngineerOptions(),
                 codeOptions: new ModelCodeGenerationOptions
